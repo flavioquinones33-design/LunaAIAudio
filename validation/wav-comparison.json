@@ -1,0 +1,26 @@
+{
+  "fixture": "synthetic tones/noise; no speech",
+  "samples": 576000,
+  "rate": 48000,
+  "channels": 1,
+  "noise_only_test_windows_samples": [
+    [
+      24000,
+      48000
+    ],
+    [
+      264000,
+      288000
+    ],
+    [
+      312000,
+      336000
+    ],
+    [
+      552000,
+      576000
+    ]
+  ],
+  "noise_only_rms_attenuation_db": 11.084969923966334,
+  "quality_claim": "Noise energy measurement only; not speech intelligibility or real-world quality."
+}

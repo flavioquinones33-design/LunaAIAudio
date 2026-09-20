@@ -1,0 +1,8 @@
+MajorSubsystemVersion	5
+MinorSubsystemVersion	2
+Subsystem		00000002	(Windows GUI)
+DLL Name: COMCTL32.dll
+DLL Name: GDI32.dll
+DLL Name: KERNEL32.dll
+DLL Name: msvcrt.dll
+DLL Name: USER32.dll

@@ -1,0 +1,9 @@
+Test project /workspace/scratch/a1ed95a88977/luna-audio-ai/build-sanitize
+    Start 1: core_and_wav
+1/2 Test #1: core_and_wav .....................   Passed    2.75 sec
+    Start 2: cli_help
+2/2 Test #2: cli_help .........................   Passed    0.06 sec
+
+100% tests passed out of 2
+
+Total Test time (real) =   2.81 sec

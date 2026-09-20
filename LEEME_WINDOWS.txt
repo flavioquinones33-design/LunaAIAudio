@@ -1,0 +1,44 @@
+LUNA AUDIO AI — PROTOTIPO PARA WINDOWS X64
+
+1. Extrae todo el paquete Windows en una carpeta local.
+2. Abre LunaAudioAI.exe.
+3. Selecciona tu micrófono y la salida de audífonos.
+4. Pulsa Start audio para comenzar.
+5. Noise suppression activa/desactiva RNNoise.
+6. Suppression mix mezcla el original con el procesado.
+7. Monitor in headphones permite escucharte. Usa audífonos.
+8. Stop audio detiene la captura; cerrar la ventana también la detiene.
+
+El micrófono no se activa hasta pulsar Start. El monitoreo comienza apagado.
+El audio se procesa en el equipo. No hay grabación en vivo, nube ni telemetría.
+
+PRUEBA SIN MICRÓFONO
+En samples hay dos WAV sintéticos para comparar. No contienen voces reales.
+Abre PowerShell en la carpeta extraída y ejecuta:
+
+  .\luna-tests.exe
+  .\luna-cli.exe benchmark --seconds 60
+  .\luna-cli.exe devices
+
+Para procesar un WAV tuyo, usa rutas locales y un archivo de salida nuevo:
+
+  .\luna-cli.exe wav "C:\AudioTests\original.wav" "C:\AudioTests\limpio.wav"
+
+Solo este comando guarda audio procesado. No sobrescribe archivos existentes.
+No uses información de pacientes ni audio clínico confidencial sin autorización
+organizacional expresa para ese flujo. Para pruebas, usa material sintético o
+audio autorizado que no sea confidencial.
+
+ESTADO REAL
+El motor y el modo WAV pasaron pruebas en Linux. Los ejecutables de Windows
+fueron compilados para x64, pero no ejecutados en un Windows físico aquí.
+Queda validar en tu PC: detección del micrófono, escucha, latencia y estabilidad.
+V1 todavía no está declarada completa. El ejecutable no tiene firma digital.
+
+Esta versión NO aparece como micrófono virtual en Zoom, Meet o Teams.
+No se afirma rendimiento equivalente a Krisp.
+
+README.md: instrucciones completas, incluida compilación desde código fuente.
+VALIDATION.md: resultados medidos y alcance de las pruebas.
+WINDOWS_TEST_CHECKLIST.md: pasos para completar la validación física.
+PRIVACY.md: privacidad. ARCHITECTURE.md: diseño. V2_ROADMAP.md: propuesta futura.

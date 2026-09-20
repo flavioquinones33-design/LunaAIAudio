@@ -1,0 +1,3 @@
+Wine test attempt: blocked by environment.
+wineserver: socket: Operation not permitted
+No Windows runtime test or GUI visual inspection is claimed.

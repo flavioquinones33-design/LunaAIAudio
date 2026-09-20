@@ -1,0 +1,6 @@
+MajorSubsystemVersion	5
+MinorSubsystemVersion	2
+Subsystem		00000003	(Windows CUI)
+DLL Name: KERNEL32.dll
+DLL Name: msvcrt.dll
+DLL Name: SHELL32.dll

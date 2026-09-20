@@ -1,0 +1,17 @@
+{
+  "sample_rate": 48000,
+  "channels": 1,
+  "samples": 576000,
+  "audio_seconds": 12.000000,
+  "wall_seconds": 0.378046,
+  "cpu_seconds": 0.378017,
+  "wall_realtime_factor": 0.031504,
+  "cpu_percent_one_core_equivalent": 3.150142,
+  "dsp_mean_us": 297.376892,
+  "dsp_max_us": 4342.793945,
+  "dsp_frames_over_10ms": 0,
+  "pipeline_delay_ms": 20,
+  "physical_end_to_end_latency_ms": null,
+  "input_rms": 0.070786,
+  "output_rms": 0.062539
+}

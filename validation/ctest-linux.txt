@@ -1,0 +1,9 @@
+Test project /workspace/scratch/a1ed95a88977/luna-audio-ai/build
+    Start 1: core_and_wav
+1/2 Test #1: core_and_wav .....................   Passed    0.30 sec
+    Start 2: cli_help
+2/2 Test #2: cli_help .........................   Passed    0.01 sec
+
+100% tests passed out of 2
+
+Total Test time (real) =   0.32 sec

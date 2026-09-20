@@ -1,0 +1,13 @@
+PASS RNNoise silence, finite output and metrics
+PASS Wrapper equals upstream RNNoise with PCM scale conversion
+PASS Bypass preserves signal and EOF tail with arbitrary chunks
+PASS Dry/wet alignment for pluggable engine frame and latency
+PASS RNNoise result independent of callback chunk partition
+PASS Invalid samples sanitized; input bounded; in-place allowed
+PASS Live control transitions remain finite and bounded
+PASS Synthetic stationary noise energy reduced (not speech quality)
+PASS WAV bypass lengths, short files, quantization and trailing sample
+PASS WAV 44.1 kHz stereo conversion to 48 kHz mono
+PASS Originals and existing outputs protected, invalid inputs rejected
+PASS Invalid engine/fixture/strength rejected
+12 test groups passed; 0 failed

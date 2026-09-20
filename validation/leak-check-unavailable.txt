@@ -1,0 +1,21 @@
+Test project /workspace/scratch/a1ed95a88977/luna-audio-ai/build-sanitize
+    Start 1: core_and_wav
+1/2 Test #1: core_and_wav .....................***Failed    2.91 sec
+==7==LeakSanitizer has encountered a fatal error.
+==7==HINT: For debugging, try setting environment variable LSAN_OPTIONS=verbosity=1:log_threads=1
+==7==HINT: LeakSanitizer does not work under ptrace (strace, gdb, etc)
+
+    Start 2: cli_help
+2/2 Test #2: cli_help .........................***Failed    0.05 sec
+==9==LeakSanitizer has encountered a fatal error.
+==9==HINT: For debugging, try setting environment variable LSAN_OPTIONS=verbosity=1:log_threads=1
+==9==HINT: LeakSanitizer does not work under ptrace (strace, gdb, etc)
+
+
+0% tests passed, 2 tests failed out of 2
+
+Total Test time (real) =   2.97 sec
+
+The following tests FAILED:
+	  1 - core_and_wav (Failed)
+	  2 - cli_help (Failed)

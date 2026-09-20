@@ -1,0 +1,10 @@
+Backend: ALSA
+Microphones: 1
+  0: Discard all samples (playback) or generate zero samples (capture)
+Outputs: 1
+  0: Discard all samples (playback) or generate zero samples (capture)
+socket(): Operation not permitted
+socket(): Operation not permitted
+
+Exit code: 0
+NOTE: ALSA discard/zero endpoint is synthetic, not physical microphone evidence.

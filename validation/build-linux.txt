@@ -1,0 +1,7 @@
+[0/1] Re-running CMake...
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /workspace/scratch/a1ed95a88977/luna-audio-ai/build
+[1/4] Linking CXX executable luna-cli
+[2/4] Building CXX object CMakeFiles/luna-tests.dir/tests/tests.cpp.o
+[3/4] Linking CXX executable luna-tests
