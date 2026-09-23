@@ -24,7 +24,7 @@ flowchart TD
 | NoiseSuppressionEngine | `include/luna/engine.hpp` | Normalized float mono input/output; declared sample rate, frame size and algorithmic latency; no allocation or exceptions during `process`. |
 | RNNoiseEngine | `src/engine.cpp` | Own RNNoise state, convert normalized PCM to/from 16-bit-amplitude float units, call upstream inference. |
 | AudioProcessor | `src/processor.cpp` | Arbitrary capture chunk sizes to exact engine frames, delay-aligned bypass/mixing, smooth control transitions. |
-| AudioOutput / MonitoringOutput | `src/audio.cpp` | Render processed PCM into playback buffer with mute and a short gain ramp. V1 monitoring gain is -12 dB. |
+| AudioOutput / MonitoringOutput | `src/audio.cpp` | Render processed PCM into the selected playback buffer with mute, -12 dB headphone mode, or unity gain virtual-cable mode and a short gain ramp. The virtual recording endpoint belongs to a separately installed driver. |
 | AudioMetrics | `include/luna/metrics.hpp` | Lock-free scalar snapshots; frame RMS/peak, elapsed DSP/callback timing, overruns, invalid sample count. |
 | Application UI | `src/windows_ui.cpp` | Device selection, explicit Start/Stop, on/off, mix, monitoring and 10 Hz metrics rendering. No audio work on paint callbacks. |
 | WAV test adapter | `src/wav.cpp` | Local RIFF validation/decoding, 48 kHz mono conversion, exclusive creation of PCM16 output, delay trimming and tail flush. |

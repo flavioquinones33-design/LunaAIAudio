@@ -12,15 +12,34 @@ confidence and remaining gates. No claim of Krisp-equivalent performance is made
 
 1. Extract the entire `Luna_Audio_AI_Windows_x64.zip` into a local folder.
 2. Open `LunaAudioAI.exe` on Windows 10/11 x64. The prototype is unsigned.
-3. Select a microphone and a headphone/output endpoint. Click **Start audio**.
-4. Enable **Monitor in headphones** only when you want to hear the processed signal.
-   Monitor gain is fixed at -12 dB; monitoring is OFF at launch.
+3. Select a microphone and a headphone/output endpoint. Choose **Headphones (-12 dB)**
+   in the output mode selector if you want to hear the processed signal, then click
+   **Start audio**. The output mode defaults to **Muted**.
 5. Toggle **Noise suppression**, or adjust **Suppression mix**. Click **Stop audio**
    before changing devices. Closing the app stops capture and releases the device.
 
-There is no virtual microphone in V1. This application does not yet appear as a
-microphone choice in Zoom, Google Meet or Teams. Both a microphone and an output
-endpoint are required, even when monitoring is muted.
+### Send processed audio to a call or recording app
+
+The application has no built-in virtual microphone. For app-to-app routing, install a
+virtual audio cable separately, for example VB-CABLE from its official site
+<https://vb-audio.com/Cable/>. Follow its installation and reboot instructions.
+The driver is not bundled with Luna Audio AI. Then:
+
+1. In Luna Audio AI, choose your **physical microphone** as input and **CABLE Input**
+   (the cable's *playback* endpoint) as output. Click **Refresh** if it is missing.
+2. Set output mode to **Virtual cable (full level)**, enable noise suppression,
+   set the suppression mix to 100%, and click **Start audio**.
+3. In the calling/recording app, select **CABLE Output** (the cable's *recording*
+   endpoint) as its microphone. Do not select the physical microphone there.
+4. Make a short test recording in the calling app, explicitly if you want to record.
+   Switch Luna's suppression OFF/ON to compare. Luna itself does not record live audio.
+
+Do not select the cable's recording endpoint as Luna's input: that can create a loop.
+Do not set CABLE Input as Windows' default speaker; keep other computer audio on
+your normal headphones/speakers. Routing to a physical speaker at full level can
+create feedback, so use the **Headphones (-12 dB)** mode for direct listening.
+Both capture and playback endpoints are required even when the output mode is muted.
+The Windows driver and actual call app routing still require hardware validation.
 
 Windows microphone access must be enabled for desktop apps in **Settings > Privacy
 & security > Microphone** (Windows 11) or **Settings > Privacy > Microphone** (Windows
@@ -95,9 +114,12 @@ limits are unsupported. Truncated RIFF containers and empty WAVs are rejected.
 .\build\Release\luna-cli.exe live --mic 0 --output 0 --seconds 600
 # Explicit headphone monitoring:
 .\build\Release\luna-cli.exe live --mic 0 --output 0 --seconds 60 --monitor
+# Route to an explicitly selected virtual cable playback endpoint:
+.\build\Release\luna-cli.exe live --mic 0 --output 1 --seconds 60 --route
 ```
 
 Use indices from `devices`; indices can change when devices are reconnected.
+The `--output 1` above is only an example: check your own device list for CABLE Input.
 Ctrl+C stops. `live` never records. Omitting an index selects the system default.
 The GUI exposes the same engine and streaming processor.
 
@@ -106,6 +128,7 @@ The GUI exposes the same engine and streaming processor.
 | Display/control | Meaning |
 |---|---|
 | Noise suppression OFF | Delayed original signal; RNNoise stays warm for smooth switching. CPU does not drop to zero. |
+| Output mode | Muted by default; Headphones outputs at -12 dB; Virtual cable outputs processed audio at unity gain to the selected playback endpoint. Only a separate cable driver exposes this as a recording endpoint to other apps. |
 | Suppression mix | 0% delayed dry, 100% RNNoise; delay-aligned blend, not an RNNoise model strength parameter. |
 | Input/output meters | Latest 10 ms RMS in dBFS, floor -120 dBFS. Output is measured before monitoring attenuation/mute. Red indicates peak >= 0.99. |
 | DSP last / mean / max | Measured wall time for RNNoise + dry/wet mixing per frame, since the current Start. Not acoustic round-trip latency. |

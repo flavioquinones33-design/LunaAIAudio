@@ -78,10 +78,10 @@ std::string MiniaudioInput::streamInfo() const {
 }
 void MonitoringOutput::render(float* samples, std::size_t count) noexcept {
     if (!samples) return;
-    // Monitoring is deliberately quieter (-12 dB), with a 5 ms gain ramp.
-    float target = enabled_.load(std::memory_order_relaxed) ? 0.25f : 0.0f;
+    // Headphones are quieter (-12 dB); routed output is unity gain.
+    float target = targetGain_.load(std::memory_order_relaxed);
     for (std::size_t i = 0; i < count; ++i) {
-        gain_ += std::clamp(target - gain_, -1.0f/960, 1.0f/960);
+        gain_ += std::clamp(target - gain_, -1.0f/240, 1.0f/240);
         samples[i] *= gain_;
     }
 }
@@ -93,11 +93,11 @@ void LiveSession::callback(void* user, const float* in, float* out, std::size_t 
     float us = std::chrono::duration<float, std::micro>(std::chrono::steady_clock::now() - start).count();
     self.processor_->metrics().callback(us, static_cast<float>(count) * 1000000.0f / sample_rate);
 }
-void LiveSession::start(const AudioDevice* mic, const AudioDevice* out, bool suppress, float strength, bool monitor) {
+void LiveSession::start(const AudioDevice* mic, const AudioDevice* out, bool suppress, float strength, MonitoringOutput::Mode mode) {
     stop();
     processor_ = std::make_unique<AudioProcessor>();
     processor_->setEnabled(suppress); processor_->setStrength(strength);
-    output_.enable(monitor);
+    output_.setMode(mode);
     input_.start(mic, out, callback, this);
 }
 }

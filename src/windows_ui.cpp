@@ -7,7 +7,7 @@
 
 namespace {
 constexpr COLORREF background = RGB(245,247,250), ink = RGB(23,35,54), muted = RGB(91,105,123), teal = RGB(0,132,120);
-enum { Microphone = 101, Output, Refresh, Suppress, Monitor, Strength, Start };
+enum { Microphone = 101, Output, Refresh, Suppress, OutputMode, Strength, Start };
 int scale = 96;
 int px(int n) { return MulDiv(n, scale, 96); }
 std::wstring wide(const std::string& s) {
@@ -17,7 +17,7 @@ std::wstring wide(const std::string& s) {
     MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, w.data(), n); w.pop_back(); return w;
 }
 struct App {
-    HWND window{}, mic{}, output{}, refresh{}, suppress{}, monitor{}, strength{}, start{};
+    HWND window{}, mic{}, output{}, refresh{}, suppress{}, outputMode{}, strength{}, start{};
     HFONT normal{}, heading{}, small{}, bold{};
     HBRUSH bg = CreateSolidBrush(background), white = CreateSolidBrush(RGB(255,255,255));
     std::unique_ptr<luna::LiveSession> session;
@@ -44,7 +44,10 @@ struct App {
         output = control(WC_COMBOBOXW,L"",CBS_DROPDOWNLIST|WS_VSCROLL,44,219,688,240,Output);
         suppress = control(L"BUTTON",L"Noise suppression",BS_AUTOCHECKBOX,44,281,260,28,Suppress);
         SendMessageW(suppress,BM_SETCHECK,BST_CHECKED,0);
-        monitor = control(L"BUTTON",L"Monitor in headphones",BS_AUTOCHECKBOX,398,281,310,28,Monitor);
+        outputMode = control(WC_COMBOBOXW,L"",CBS_DROPDOWNLIST|WS_VSCROLL,398,281,310,120,OutputMode);
+        for (const auto* label : {L"Muted", L"Headphones (-12 dB)", L"Virtual cable (full level)"})
+            SendMessageW(outputMode,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
+        SendMessageW(outputMode,CB_SETCURSEL,0,0);
         strength = control(TRACKBAR_CLASSW,L"",TBS_HORZ|TBS_NOTICKS,40,349,696,35,Strength);
         SendMessageW(strength,TBM_SETRANGE,TRUE,MAKELPARAM(0,100)); SendMessageW(strength,TBM_SETPOS,TRUE,100);
         start = control(L"BUTTON",L"Start audio",BS_DEFPUSHBUTTON,44,643,174,42,Start);
@@ -81,9 +84,9 @@ struct App {
                 session->start(&devices.microphones.at(static_cast<std::size_t>(m)), &devices.outputs.at(static_cast<std::size_t>(o)),
                     SendMessageW(suppress,BM_GETCHECK,0,0)==BST_CHECKED,
                     static_cast<float>(SendMessageW(strength,TBM_GETPOS,0,0))/100,
-                    SendMessageW(monitor,BM_GETCHECK,0,0)==BST_CHECKED);
+                    selectedMode());
                 active = true; native = wide(session->streamInfo());
-                status = L"Processing locally. Monitoring is optional; recording is OFF.";
+                status = L"Processing locally. Select the cable's recording end in your call app.";
             }
         } catch (const std::exception& e) { if(session) session->stop(); active=false; status=wide(e.what()); MessageBoxW(window,status.c_str(),L"Luna Audio AI",MB_OK|MB_ICONERROR); }
         updateControls();
@@ -92,6 +95,12 @@ struct App {
         SetWindowTextW(start,active ? L"Stop audio" : L"Start audio");
         for(auto c:{mic,output,refresh}) EnableWindow(c,!active);
         InvalidateRect(window,nullptr,FALSE);
+    }
+    luna::MonitoringOutput::Mode selectedMode() const {
+        auto index = SendMessageW(outputMode,CB_GETCURSEL,0,0);
+        return index == 2 ? luna::MonitoringOutput::Mode::route
+             : index == 1 ? luna::MonitoringOutput::Mode::headphones
+                          : luna::MonitoringOutput::Mode::muted;
     }
     void tick() {
         if(active && session) {
@@ -132,10 +141,10 @@ struct App {
         text(dc,592,35,180,24,L"LOCAL  /  RNNoise",bold,teal);
         RECT card{px(28),px(117),px(748),px(626)};FillRect(dc,&card,white);
         text(dc,44,128,500,22,L"MICROPHONE",small,muted);
-        text(dc,44,194,500,22,L"HEADPHONE / MONITOR OUTPUT",small,muted);
+        text(dc,44,194,650,22,L"OUTPUT: HEADPHONES OR VIRTUAL CABLE INPUT",small,muted);
         auto amount=SendMessageW(strength,TBM_GETPOS,0,0);
         text(dc,44,326,660,24,L"Suppression mix   "+std::to_wstring(amount)+L"%",normal);
-        text(dc,44,388,685,20,L"Mix blends original + denoised audio. Use headphones for monitoring (-12 dB).",small,muted);
+        text(dc,44,388,685,34,L"Mix blends original + denoised audio. Cable route requires a virtual cable driver.",small,muted);
         meter(dc,44,431,L"Input",active?metrics.inputDb:-120,active?metrics.inputPeak:0);
         meter(dc,398,431,L"Processed output",active?metrics.outputDb:-120,active?metrics.outputPeak:0);
         std::wostringstream s;s<<std::fixed<<std::setprecision(2)<<L"DSP last / mean / max: "<<metrics.processUs/1000<<L" / "<<metrics.meanUs/1000<<L" / "<<metrics.maxUs/1000<<L" ms";
@@ -143,7 +152,7 @@ struct App {
         s.str(L"");s.clear();s<<std::fixed<<std::setprecision(1)<<L"Process CPU: "<<cpu<<L"% of one core   |   Late frames: "<<metrics.lateFrames<<L"   |   Late callbacks: "<<metrics.lateCallbacks;
         text(dc,44,529,690,24,s.str(),small,muted);
         text(dc,44,559,690,40,L"Pipeline delay: 20 ms + device buffering. Physical end-to-end latency: unmeasured.",small,muted);
-        text(dc,44,594,690,22,active?native:L"48 kHz mono  /  Float PCM  /  No virtual microphone in V1",small,muted);
+        text(dc,44,594,690,22,active?native:L"48 kHz mono / No built-in virtual microphone",small,muted);
         text(dc,238,645,495,43,status,normal,active?teal:ink);
         text(dc,32,711,720,22,L"No cloud processing. No audio telemetry. Live recording unavailable in V1.",small,muted);
     }
@@ -159,7 +168,8 @@ LRESULT CALLBACK procedure(HWND w,UINT msg,WPARAM wp,LPARAM lp) {
         if(LOWORD(wp)==Refresh) app->enumerate();
         else if(LOWORD(wp)==Start) app->toggle();
         else if(LOWORD(wp)==Suppress && app->session && app->session->processor()) app->session->processor()->setEnabled(SendMessageW(app->suppress,BM_GETCHECK,0,0)==BST_CHECKED);
-        else if(LOWORD(wp)==Monitor && app->session) app->session->output().enable(SendMessageW(app->monitor,BM_GETCHECK,0,0)==BST_CHECKED);
+        else if(LOWORD(wp)==OutputMode && HIWORD(wp)==CBN_SELCHANGE && app->session)
+            app->session->output().setMode(app->selectedMode());
         return 0;
     case WM_HSCROLL:
         if(app->session && app->session->processor()) app->session->processor()->setStrength(static_cast<float>(SendMessageW(app->strength,TBM_GETPOS,0,0))/100);

@@ -1,4 +1,5 @@
 #include "luna/processor.hpp"
+#include "luna/audio.hpp"
 #include "luna/wav.hpp"
 #include "miniaudio.h"
 #include <algorithm>
@@ -65,6 +66,19 @@ int main(){
     std::filesystem::create_directory(dir);
     unsigned passed=0,failed=0;
     auto test=[&](const char*name,std::function<void()>body){try{body();++passed;std::cout<<"PASS "<<name<<'\n';}catch(const std::exception&e){++failed;std::cerr<<"FAIL "<<name<<": "<<e.what()<<'\n';}};
+    test("Virtual cable mode passes processed audio; mute and headphone modes do not",[]{
+        luna::MonitoringOutput output;
+        std::array<float,480> frame{};
+        output.setMode(luna::MonitoringOutput::Mode::route);
+        frame.fill(0.5f);output.render(frame.data(),frame.size());
+        require(std::abs(frame.back()-0.5f)<1e-6f,"Cable output attenuated");
+        output.setMode(luna::MonitoringOutput::Mode::headphones);
+        frame.fill(0.5f);output.render(frame.data(),frame.size());
+        require(std::abs(frame.back()-0.125f)<1e-6f,"Headphone output gain incorrect");
+        output.setMode(luna::MonitoringOutput::Mode::muted);
+        frame.fill(0.5f);output.render(frame.data(),frame.size());
+        require(frame.back()==0,"Mute did not stop playback");
+    });
     test("RNNoise silence, finite output and metrics",[]{
         luna::AudioProcessor p;std::array<float,480> in{},out{};
         for(int n=0;n<100;++n){p.process(in.data(),out.data(),480);for(auto x:out)require(std::isfinite(x)&&std::abs(x)<1e-6,"Silence changed");}

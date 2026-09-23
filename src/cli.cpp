@@ -39,7 +39,7 @@ int app(const std::vector<std::string>& args) {
           "  luna-cli fixture output.wav [--seconds 12]\n"
           "  luna-cli wav input.wav output.wav [--strength 0..1] [--bypass]\n"
           "  luna-cli benchmark [--seconds 60]\n"
-          "  luna-cli live [--mic INDEX] [--output INDEX] [--seconds 60] [--monitor]\n"
+          "  luna-cli live [--mic INDEX] [--output INDEX] [--seconds 60] [--monitor | --route]\n"
           "                [--strength 0..1] [--bypass]\n"
           "Live audio is never recorded. Monitor needs headphones. WAV output must be a new local file.\n";
         return 0;
@@ -49,12 +49,20 @@ int app(const std::vector<std::string>& args) {
         throw std::invalid_argument("Unknown command; use --help");
     int start = command == "wav" ? 4 : command == "fixture" ? 3 : 2;
     if (args.size() < static_cast<std::size_t>(start)) throw std::invalid_argument("Missing WAV path; use --help");
-    double seconds = 12; float strength = 1; bool enabled = true, monitor = false;
+    double seconds = 12; float strength = 1; bool enabled = true;
+    auto outputMode = luna::MonitoringOutput::Mode::muted;
     int mic = -1, output = -1;
     for (std::size_t i = start; i < args.size(); ++i) {
         auto option = args[i];
         if (option == "--bypass" && (command == "wav" || command == "live")) enabled = false;
-        else if (option == "--monitor" && command == "live") monitor = true;
+        else if (option == "--monitor" && command == "live") {
+            if (outputMode != luna::MonitoringOutput::Mode::muted) throw std::invalid_argument("Choose either --monitor or --route");
+            outputMode = luna::MonitoringOutput::Mode::headphones;
+        }
+        else if (option == "--route" && command == "live") {
+            if (outputMode != luna::MonitoringOutput::Mode::muted) throw std::invalid_argument("Choose either --monitor or --route");
+            outputMode = luna::MonitoringOutput::Mode::route;
+        }
         else {
             if (++i == args.size()) throw std::invalid_argument("Missing option value");
             auto x = number(args[i]);
@@ -80,7 +88,7 @@ int app(const std::vector<std::string>& args) {
     if (command == "devices") return 0;
     if (mic >= static_cast<int>(devices.microphones.size()) || output >= static_cast<int>(devices.outputs.size())) throw std::invalid_argument("Device index is out of range");
     std::signal(SIGINT, signalHandler);
-    session.start(mic < 0 ? nullptr : &devices.microphones[mic], output < 0 ? nullptr : &devices.outputs[output], enabled, strength, monitor);
+    session.start(mic < 0 ? nullptr : &devices.microphones[mic], output < 0 ? nullptr : &devices.outputs[output], enabled, strength, outputMode);
     std::cout << session.streamInfo() << "\nLive processing; recording OFF. Ctrl+C stops.\n";
     auto startTime = std::chrono::steady_clock::now();
     while (!interrupted && std::chrono::duration<double>(std::chrono::steady_clock::now()-startTime).count() < seconds) {

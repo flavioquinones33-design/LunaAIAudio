@@ -22,11 +22,16 @@ public:
     virtual void render(float* processed, std::size_t count) noexcept = 0;
 };
 class MonitoringOutput final : public AudioOutput {
-    std::atomic<bool> enabled_{false};
+    // A virtual cable is a playback endpoint: it needs unity gain even when
+    // headphone monitoring is disabled.
+    std::atomic<float> targetGain_{0};
     float gain_ = 0;
 public:
-    void enable(bool enabled) noexcept { enabled_.store(enabled, std::memory_order_relaxed); }
-    bool enabled() const noexcept { return enabled_.load(std::memory_order_relaxed); }
+    enum class Mode { muted, headphones, route };
+    void setMode(Mode mode) noexcept {
+        targetGain_.store(mode == Mode::route ? 1.0f : mode == Mode::headphones ? 0.25f : 0.0f,
+                          std::memory_order_relaxed);
+    }
     void render(float*, std::size_t) noexcept override;
 };
 class MiniaudioInput final : public AudioInput {
@@ -56,7 +61,7 @@ class LiveSession {
 public:
     ~LiveSession() { stop(); }
     DeviceList enumerate() { return input_.enumerate(); }
-    void start(const AudioDevice*, const AudioDevice*, bool suppress, float strength, bool monitor);
+    void start(const AudioDevice*, const AudioDevice*, bool suppress, float strength, MonitoringOutput::Mode mode);
     void stop() noexcept { input_.stop(); }
     bool running() const noexcept { return input_.running(); }
     unsigned interruptions() const noexcept { return input_.interruptions(); }
