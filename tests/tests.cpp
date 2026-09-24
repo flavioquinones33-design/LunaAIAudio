@@ -110,7 +110,7 @@ int main(){
         auto in=noise(48000*3);luna::AudioProcessor p;auto out=stream(p,in,480);double a=0,b=0;for(std::size_t i=48000;i<in.size();++i){a+=double(in[i])*in[i];b+=double(out[i])*out[i];}require(b<a*0.8,"Expected synthetic noise attenuation");
     });
     test("WAV bypass lengths, short files, quantization and trailing sample",[&]{
-        for(std::size_t size:{1u,17u,479u,480u,481u,1001u,48000u}){auto input=noise(size);input.back()=0.7f;auto source=dir/(std::to_string(size)+".wav"),dest=dir/(std::to_string(size)+"-out.wav");{luna::WavWriter w(source);w.write(input.data(),input.size());w.finish();}auto r=luna::processWav(source,dest,1,false);auto a=read(source),b=read(dest);require(r.samples==size&&a.size()==size&&b.size()==size,"WAV length mismatch");for(std::size_t i=0;i<size;++i)require(std::abs(a[i]-b[i])<=2.0/32768,"Bypass WAV changed");}
+        for(std::size_t size:{1u,17u,479u,480u,481u,1001u,48000u}){auto input=noise(size);input.back()=0.7f;auto source=dir/(std::to_string(size)+".wav"),dest=dir/(std::to_string(size)+"-out.wav");{luna::WavWriter w(source);w.write(input.data(),input.size());w.finish();}auto r=luna::processWav(source,dest,1,false);auto a=read(source),b=read(dest);require(r.pipelineDelaySamples==960,"Incorrect RNNoise pipeline delay");require(r.samples==size&&a.size()==size&&b.size()==size,"WAV length mismatch");for(std::size_t i=0;i<size;++i)require(std::abs(a[i]-b[i])<=2.0/32768,"Bypass WAV changed");}
     });
     test("WAV 44.1 kHz stereo conversion to 48 kHz mono",[&]{
         auto source=dir/"stereo441.wav",dest=dir/"stereo-out.wav";std::vector<short> data(44100*2);
@@ -128,6 +128,7 @@ int main(){
     test("Invalid engine/fixture/strength rejected",[&]{
         fails([]{luna::AudioProcessor p(nullptr);});fails([]{luna::AudioProcessor p(std::make_unique<DelayEngine>(0,0));});
         fails([&]{luna::generateFixture(dir/"invalid.wav",-1);});fails([&]{luna::processWav(dir/"fixture.wav",dir/"invalid.wav",2);});
+        fails([&]{luna::makeDeepFilterNet3(dir/"missing.dll",dir/"DeepFilterNet3_onnx.tar.gz");});
     });
     std::filesystem::remove_all(dir);
     std::cout<<passed<<" test groups passed; "<<failed<<" failed\n";

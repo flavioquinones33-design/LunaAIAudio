@@ -93,9 +93,10 @@ void LiveSession::callback(void* user, const float* in, float* out, std::size_t 
     float us = std::chrono::duration<float, std::micro>(std::chrono::steady_clock::now() - start).count();
     self.processor_->metrics().callback(us, static_cast<float>(count) * 1000000.0f / sample_rate);
 }
-void LiveSession::start(const AudioDevice* mic, const AudioDevice* out, bool suppress, float strength, MonitoringOutput::Mode mode) {
+void LiveSession::start(const AudioDevice* mic, const AudioDevice* out, bool suppress, float strength,
+                        MonitoringOutput::Mode mode, std::unique_ptr<NoiseSuppressionEngine> engine) {
     stop();
-    processor_ = std::make_unique<AudioProcessor>();
+    processor_ = std::make_unique<AudioProcessor>(std::move(engine));
     processor_->setEnabled(suppress); processor_->setStrength(strength);
     output_.setMode(mode);
     input_.start(mic, out, callback, this);

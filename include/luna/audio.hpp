@@ -61,7 +61,8 @@ class LiveSession {
 public:
     ~LiveSession() { stop(); }
     DeviceList enumerate() { return input_.enumerate(); }
-    void start(const AudioDevice*, const AudioDevice*, bool suppress, float strength, MonitoringOutput::Mode mode);
+    void start(const AudioDevice*, const AudioDevice*, bool suppress, float strength,
+               MonitoringOutput::Mode mode, std::unique_ptr<NoiseSuppressionEngine> engine = makeRNNoise());
     void stop() noexcept { input_.stop(); }
     bool running() const noexcept { return input_.running(); }
     unsigned interruptions() const noexcept { return input_.interruptions(); }

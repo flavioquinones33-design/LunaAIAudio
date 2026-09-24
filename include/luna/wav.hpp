@@ -19,11 +19,13 @@ public:
 };
 struct WavResult {
     std::uint64_t samples = 0;
+    std::size_t pipelineDelaySamples = 0;
     double wallSeconds = 0, cpuSeconds = 0, inputRms = 0, outputRms = 0;
     MetricsSnapshot metrics;
 };
 WavResult processWav(const std::filesystem::path& input, const std::filesystem::path& output,
-                     float strength = 1, bool enabled = true);
+                     float strength = 1, bool enabled = true,
+                     std::unique_ptr<NoiseSuppressionEngine> engine = makeRNNoise());
 void generateFixture(const std::filesystem::path& output, double seconds);
 WavResult benchmark(double seconds);
 }

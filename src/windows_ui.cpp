@@ -4,10 +4,11 @@
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
 
 namespace {
 constexpr COLORREF background = RGB(245,247,250), ink = RGB(23,35,54), muted = RGB(91,105,123), teal = RGB(0,132,120);
-enum { Microphone = 101, Output, Refresh, Suppress, OutputMode, Strength, Start };
+enum { Microphone = 101, Output, Refresh, Suppress, OutputMode, DeepFilter, Strength, Start };
 int scale = 96;
 int px(int n) { return MulDiv(n, scale, 96); }
 std::wstring wide(const std::string& s) {
@@ -17,7 +18,7 @@ std::wstring wide(const std::string& s) {
     MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, w.data(), n); w.pop_back(); return w;
 }
 struct App {
-    HWND window{}, mic{}, output{}, refresh{}, suppress{}, outputMode{}, strength{}, start{};
+    HWND window{}, mic{}, output{}, refresh{}, suppress{}, outputMode{}, deepFilter{}, strength{}, start{};
     HFONT normal{}, heading{}, small{}, bold{};
     HBRUSH bg = CreateSolidBrush(background), white = CreateSolidBrush(RGB(255,255,255));
     std::unique_ptr<luna::LiveSession> session;
@@ -48,6 +49,7 @@ struct App {
         for (const auto* label : {L"Muted", L"Headphones (-12 dB)", L"Virtual cable (full level)"})
             SendMessageW(outputMode,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
         SendMessageW(outputMode,CB_SETCURSEL,0,0);
+        deepFilter = control(L"BUTTON",L"Use DeepFilterNet3 (external)",BS_AUTOCHECKBOX,398,315,310,28,DeepFilter);
         strength = control(TRACKBAR_CLASSW,L"",TBS_HORZ|TBS_NOTICKS,40,349,696,35,Strength);
         SendMessageW(strength,TBM_SETRANGE,TRUE,MAKELPARAM(0,100)); SendMessageW(strength,TBM_SETPOS,TRUE,100);
         start = control(L"BUTTON",L"Start audio",BS_DEFPUSHBUTTON,44,643,174,42,Start);
@@ -81,10 +83,18 @@ struct App {
             } else {
                 auto m = SendMessageW(mic,CB_GETCURSEL,0,0), o = SendMessageW(output,CB_GETCURSEL,0,0);
                 if (m < 0 || o < 0) return;
+                std::unique_ptr<luna::NoiseSuppressionEngine> engine;
+                if (SendMessageW(deepFilter,BM_GETCHECK,0,0)==BST_CHECKED) {
+                    wchar_t filename[MAX_PATH]{};
+                    auto n = GetModuleFileNameW(nullptr,filename,MAX_PATH);
+                    if (!n || n >= MAX_PATH) throw std::runtime_error("Cannot locate the application folder");
+                    auto folder = std::filesystem::path(filename).parent_path();
+                    engine = luna::makeDeepFilterNet3(folder/L"deepfilter.dll",folder/L"DeepFilterNet3_onnx.tar.gz");
+                } else engine = luna::makeRNNoise();
                 session->start(&devices.microphones.at(static_cast<std::size_t>(m)), &devices.outputs.at(static_cast<std::size_t>(o)),
                     SendMessageW(suppress,BM_GETCHECK,0,0)==BST_CHECKED,
                     static_cast<float>(SendMessageW(strength,TBM_GETPOS,0,0))/100,
-                    selectedMode());
+                    selectedMode(),std::move(engine));
                 active = true; native = wide(session->streamInfo());
                 status = L"Processing locally. Select the cable's recording end in your call app.";
             }
@@ -93,7 +103,7 @@ struct App {
     }
     void updateControls() {
         SetWindowTextW(start,active ? L"Stop audio" : L"Start audio");
-        for(auto c:{mic,output,refresh}) EnableWindow(c,!active);
+        for(auto c:{mic,output,refresh,deepFilter}) EnableWindow(c,!active);
         InvalidateRect(window,nullptr,FALSE);
     }
     luna::MonitoringOutput::Mode selectedMode() const {
@@ -138,7 +148,8 @@ struct App {
         RECT all;GetClientRect(window,&all);FillRect(dc,&all,bg);
         text(dc,32,24,490,44,L"Luna Audio AI",heading);
         text(dc,34,75,650,24,L"A clearer microphone. Processed on your computer.",normal,muted);
-        text(dc,592,35,180,24,L"LOCAL  /  RNNoise",bold,teal);
+        text(dc,575,35,190,24,active && SendMessageW(deepFilter,BM_GETCHECK,0,0)==BST_CHECKED
+            ? L"LOCAL / DeepFilterNet3" : L"LOCAL / RNNoise",small,teal);
         RECT card{px(28),px(117),px(748),px(626)};FillRect(dc,&card,white);
         text(dc,44,128,500,22,L"MICROPHONE",small,muted);
         text(dc,44,194,650,22,L"OUTPUT: HEADPHONES OR VIRTUAL CABLE INPUT",small,muted);
@@ -151,8 +162,12 @@ struct App {
         text(dc,44,499,690,24,s.str(),normal);
         s.str(L"");s.clear();s<<std::fixed<<std::setprecision(1)<<L"Process CPU: "<<cpu<<L"% of one core   |   Late frames: "<<metrics.lateFrames<<L"   |   Late callbacks: "<<metrics.lateCallbacks;
         text(dc,44,529,690,24,s.str(),small,muted);
-        text(dc,44,559,690,40,L"Pipeline delay: 20 ms + device buffering. Physical end-to-end latency: unmeasured.",small,muted);
-        text(dc,44,594,690,22,active?native:L"48 kHz mono / No built-in virtual microphone",small,muted);
+        auto pipelineMs = active && session && session->processor()
+            ? session->processor()->latencySamples()*1000/luna::sample_rate
+            : SendMessageW(deepFilter,BM_GETCHECK,0,0)==BST_CHECKED ? 40u : 20u;
+        text(dc,44,559,690,40,L"Pipeline delay: " + std::to_wstring(pipelineMs)
+            + L" ms + device buffering. Physical end-to-end latency: unmeasured.",small,muted);
+        text(dc,44,594,690,22,active?native:L"48 kHz mono / RNNoise default / Optional DeepFilterNet3",small,muted);
         text(dc,238,645,495,43,status,normal,active?teal:ink);
         text(dc,32,711,720,22,L"No cloud processing. No audio telemetry. Live recording unavailable in V1.",small,muted);
     }

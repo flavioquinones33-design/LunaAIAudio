@@ -119,15 +119,17 @@ void WavWriter::finish() {
     if (result != 0) throw std::runtime_error("Flush WAV failed");
     finished_ = true;
 }
-WavResult processWav(const std::filesystem::path& input, const std::filesystem::path& output, float strength, bool enabled) {
+WavResult processWav(const std::filesystem::path& input, const std::filesystem::path& output,
+                     float strength, bool enabled, std::unique_ptr<NoiseSuppressionEngine> engine) {
     if (!std::isfinite(strength) || strength < 0 || strength > 1) throw std::invalid_argument("Strength must be 0..1");
     Decoder decoder(input);
-    AudioProcessor processor;
+    AudioProcessor processor(std::move(engine));
     processor.setStrength(strength); processor.setEnabled(enabled);
     WavWriter writer(output);
     std::array<float, 4096> in{}, out{};
     auto skip = processor.latencySamples();
     WavResult r;
+    r.pipelineDelaySamples = processor.latencySamples();
     double inputEnergy = 0, outputEnergy = 0;
     auto write = [&](std::size_t count) {
         auto offset = std::min(skip, count); skip -= offset;
@@ -175,6 +177,7 @@ WavResult benchmark(double seconds) {
     validateSeconds(seconds); AudioProcessor processor;
     std::array<float, 480> in{}, out{}; std::uint32_t state = 17;
     WavResult r; r.samples = static_cast<std::uint64_t>(seconds * sample_rate);
+    r.pipelineDelaySamples = processor.latencySamples();
     double inputEnergy=0,outputEnergy=0;
     auto start = std::chrono::steady_clock::now(); auto cpuStart = processCpuSeconds();
     for (std::uint64_t i = 0; i < r.samples;) {

@@ -6,7 +6,7 @@
 flowchart TD
     A["Microphone / WASAPI"] --> B["miniaudio conversion: 48 kHz mono float"]
     B --> C["Bounded frame adapter"]
-    C --> D["NoiseSuppressionEngine: RNNoise"]
+    C --> D["NoiseSuppressionEngine: RNNoise or DeepFilterNet3"]
     C --> E["Dry signal delay"]
     D --> F["Aligned mix / processed PCM"]
     E --> F
@@ -23,6 +23,7 @@ flowchart TD
 | MiniaudioInput | `src/audio.cpp` | Own context and duplex device; Windows explicitly selects WASAPI. Capture/playback format negotiation, resampling and channel conversion are delegated to miniaudio/OS. |
 | NoiseSuppressionEngine | `include/luna/engine.hpp` | Normalized float mono input/output; declared sample rate, frame size and algorithmic latency; no allocation or exceptions during `process`. |
 | RNNoiseEngine | `src/engine.cpp` | Own RNNoise state, convert normalized PCM to/from 16-bit-amplitude float units, call upstream inference. |
+| DeepFilterNet3Engine | `src/deepfilter.cpp` | Dynamically load the upstream C API and separately supplied model at start; 480-sample 48 kHz frames, 1440-sample declared algorithm delay. |
 | AudioProcessor | `src/processor.cpp` | Arbitrary capture chunk sizes to exact engine frames, delay-aligned bypass/mixing, smooth control transitions. |
 | AudioOutput / MonitoringOutput | `src/audio.cpp` | Render processed PCM into the selected playback buffer with mute, -12 dB headphone mode, or unity gain virtual-cable mode and a short gain ramp. The virtual recording endpoint belongs to a separately installed driver. |
 | AudioMetrics | `include/luna/metrics.hpp` | Lock-free scalar snapshots; frame RMS/peak, elapsed DSP/callback timing, overruns, invalid sample count. |
@@ -33,8 +34,9 @@ flowchart TD
 
 The UI owns a LiveSession. Device enumeration/start/stop occur on its control
 thread. Starting creates a fresh AudioProcessor before opening/starting WASAPI.
-The duplex audio callback performs bounded PCM work and uses no application
-allocation, file I/O, logging, locks or UI calls. miniaudio owns backend threads,
+The duplex audio callback invokes the selected model and uses no Luna-owned
+allocation, file I/O, logging, locks or UI calls. The external DeepFilterNet C
+API's internal allocations and worst-case processing time need Windows profiling. miniaudio owns backend threads,
 its conversion buffers and duplex synchronization. Its backend internals may use
 their own synchronization; this is not a hard real-time OS guarantee.
 
@@ -68,8 +70,9 @@ declared latency before mixing, preserving gross time alignment when toggling.
 RNNoise's filtering may still alter phase and timbre; a dry/wet mix is not a
 calibrated amount of noise attenuation.
 
-Both enabled and bypass modes keep the 960-sample (20 ms) pipeline delay. A control
-change ramps across one engine frame and keeps RNNoise state warm. Output PCM is
+Both enabled and bypass modes keep the 960-sample (20 ms) RNNoise pipeline delay,
+or the 1920-sample (40 ms) DeepFilterNet3 delay. A control change ramps across
+one engine frame and keeps the selected engine state warm. Output PCM is
 bounded to [-1,1]. Non-finite capture samples become zero and are counted. No
 unbounded application audio queues grow over time.
 
@@ -106,4 +109,6 @@ dropout telemetry rather than blocking the callback.
 
 Compare engines on the same authorized clips, sample rates, gain and time alignment.
 Use separate engine instances; retain raw metrics and listening-test results.
-DeepFilterNet is not linked or downloaded by V1.
+DeepFilterNet3 is loaded optionally from an external native C API library and model;
+the Linux WAV path has been exercised, while Windows DLL build and live audio remain
+unvalidated. No external model or native library is linked, bundled, or downloaded.

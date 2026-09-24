@@ -1,7 +1,7 @@
 # Luna Audio AI
 
 Local microphone noise suppression for Windows x64. C++17, a native Win32 desktop UI,
-WASAPI through miniaudio, and the original open-source RNNoise v0.1 model.
+WASAPI through miniaudio, RNNoise v0.1, and an optional external DeepFilterNet3 engine.
 
 **Status: V1 prototype / hardware validation pending.** The audio core is tested on
 Linux and Windows executables are cross-compiled. This is not a completed Windows
@@ -15,8 +15,38 @@ confidence and remaining gates. No claim of Krisp-equivalent performance is made
 3. Select a microphone and a headphone/output endpoint. Choose **Headphones (-12 dB)**
    in the output mode selector if you want to hear the processed signal, then click
    **Start audio**. The output mode defaults to **Muted**.
-5. Toggle **Noise suppression**, or adjust **Suppression mix**. Click **Stop audio**
+4. Toggle **Noise suppression**, or adjust **Suppression mix**. Click **Stop audio**
    before changing devices. Closing the app stops capture and releases the device.
+
+### Optional DeepFilterNet3 engine
+
+DeepFilterNet3 can handle some background music better than the RNNoise baseline,
+but neither engine guarantees removal of music or another voice. The checkbox
+**Use DeepFilterNet3 (external)** loads two files from the folder containing
+`LunaAudioAI.exe`: `deepfilter.dll` (the upstream DeepFilterNet C API, renamed from
+`df.dll` if necessary) and `DeepFilterNet3_onnx.tar.gz` (the official 48 kHz model).
+Luna does not download, bundle, or install them. The checkbox requires both files;
+RNNoise remains the default and works without them. Select DeepFilterNet3 before
+pressing Start, keep suppression on and set the mix to 100%. Use the same virtual
+cable routing steps below for calls and recordings.
+
+For an independent Windows build of the external library, install Rust and the
+MSVC x64 build tools; clone the [official DeepFilterNet repository](https://github.com/Rikorose/DeepFilterNet),
+check out commit `d375b2d8309e0935d165700c91da9de862a99c31`, then run from its root:
+
+```powershell
+cargo build --release -p deep_filter --no-default-features --features capi
+Copy-Item .\target\release\df.dll C:\Path\To\Luna\deepfilter.dll
+Copy-Item .\models\DeepFilterNet3_onnx.tar.gz C:\Path\To\Luna\DeepFilterNet3_onnx.tar.gz
+```
+
+Use the actual folder containing `LunaAudioAI.exe` in place of `C:\Path\To\Luna`.
+The pinned source model's SHA-256 is
+`c94d91f70911001c946e0fabb4aa9adc37045f45a03b56008cb0c8244cb63616`.
+The upstream library's Windows build, runtime performance and audio endpoint
+behavior still need testing on a Windows x64 machine. The project's model-weights
+redistribution terms have not been resolved, so distribute neither model nor DLL
+with Luna until reviewed.
 
 ### Send processed audio to a call or recording app
 
@@ -71,8 +101,9 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 The desktop app is `build\Release\LunaAudioAI.exe`; command-line tools are
-`luna-cli.exe` and `luna-tests.exe` in the same folder. The runtime is linked
-statically. Copy the notices and documentation with any redistributed binaries.
+`luna-cli.exe` and `luna-tests.exe` in the same folder. The default RNNoise
+runtime is linked statically; the optional DeepFilterNet3 library is loaded
+separately. Copy the notices and documentation with any redistributed binaries.
 MSVC instructions are supplied for reproducibility; the executed Windows compiler
 in this delivery was MinGW-w64. Native MSVC acceptance remains pending.
 
@@ -121,18 +152,20 @@ limits are unsupported. Truncated RIFF containers and empty WAVs are rejected.
 Use indices from `devices`; indices can change when devices are reconnected.
 The `--output 1` above is only an example: check your own device list for CABLE Input.
 Ctrl+C stops. `live` never records. Omitting an index selects the system default.
-The GUI exposes the same engine and streaming processor.
+The GUI exposes the same engine and streaming processor. To test the optional
+engine in the CLI, append `--engine deepfilter --df-library "C:\Path\To\Luna\deepfilter.dll"
+--df-model "C:\Path\To\Luna\DeepFilterNet3_onnx.tar.gz"` to `wav` or `live`.
 
 ## What the controls and metrics mean
 
 | Display/control | Meaning |
 |---|---|
-| Noise suppression OFF | Delayed original signal; RNNoise stays warm for smooth switching. CPU does not drop to zero. |
+| Noise suppression OFF | Delayed original signal; the selected engine stays warm for smooth switching. CPU does not drop to zero. |
 | Output mode | Muted by default; Headphones outputs at -12 dB; Virtual cable outputs processed audio at unity gain to the selected playback endpoint. Only a separate cable driver exposes this as a recording endpoint to other apps. |
-| Suppression mix | 0% delayed dry, 100% RNNoise; delay-aligned blend, not an RNNoise model strength parameter. |
+| Suppression mix | 0% delayed dry, 100% selected engine; delay-aligned blend, not a model strength parameter. |
 | Input/output meters | Latest 10 ms RMS in dBFS, floor -120 dBFS. Output is measured before monitoring attenuation/mute. Red indicates peak >= 0.99. |
-| DSP last / mean / max | Measured wall time for RNNoise + dry/wet mixing per frame, since the current Start. Not acoustic round-trip latency. |
-| Pipeline delay | 480-sample frame adapter + 480-sample RNNoise overlap delay = 20 ms. Hardware/backend buffering is additional. |
+| DSP last / mean / max | Measured wall time for selected engine + dry/wet mixing per frame, since the current Start. Not acoustic round-trip latency. |
+| Pipeline delay | RNNoise: 20 ms; DeepFilterNet3: 40 ms (10 ms adapter + 30 ms model/STFT). Hardware/backend buffering is additional. |
 | Process CPU | Actual process CPU time, normalized to one core; includes UI and audio. Updates about once a second. |
 | Late frames / callbacks | Processing wall time exceeded the relevant audio duration. Not a complete WASAPI xrun counter. |
 | CLI real-time factor | Processing wall seconds / source audio seconds. Below 1 is faster than real time on the tested machine. |
@@ -179,6 +212,9 @@ remove them on normal completion; they do not open a microphone or need a networ
   MSVC execution must still be signed off using [WINDOWS_TEST_CHECKLIST.md](WINDOWS_TEST_CHECKLIST.md).
 - RNNoise v0.1 is a deliberately pinned older baseline, not the newest RNNoise.
   The distributed upstream model is embedded unchanged; no proprietary model is used.
+- DeepFilterNet3 is an optional external integration. It has been exercised via
+  the upstream Linux C API on a WAV, but its Windows DLL and live behavior have
+  not been validated. No model weights or Rust library are bundled.
 - No acoustic echo cancellation, target-speaker isolation, background-voice removal,
   auto noise classification, virtual microphone or meeting-app integration.
 - Speech quality and artifact rates have not been established on a representative
