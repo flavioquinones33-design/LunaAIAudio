@@ -96,7 +96,8 @@ void celt_fir(
          int ord)
 {
    int i,j;
-   opus_val16 rnum[ord];
+   opus_val16 rnum[LPC_ORDER];
+   celt_assert(ord <= LPC_ORDER);
    for(i=0;i<ord;i++)
       rnum[i] = num[ord-i-1];
    for (i=0;i<N-3;i+=4)
@@ -128,7 +129,9 @@ void celt_iir(const opus_val32 *_x,
          int ord,
          opus_val16 *mem)
 {
-#ifdef SMALL_FOOTPRINT
+/* The compact implementation is mathematically equivalent and avoids the
+   C99 VLAs used by the old unrolled path, which MSVC cannot compile. */
+#if 1
    int i,j;
    for (i=0;i<N;i++)
    {
