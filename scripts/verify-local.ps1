@@ -47,8 +47,20 @@ $environment += "computer_name=$env:COMPUTERNAME"
 $environment += "processor_architecture=$env:PROCESSOR_ARCHITECTURE"
 $environment += "processor_identifier=$env:PROCESSOR_IDENTIFIER"
 $environment += "os=$([System.Environment]::OSVersion.VersionString)"
+$environment += "powershell=$($PSVersionTable.PSVersion)"
 $environment += "cmake=$((cmake --version | Select-Object -First 1))"
 $environment += "git=$((git --version | Select-Object -First 1))"
+
+$cl = Get-Command cl.exe -ErrorAction SilentlyContinue
+if ($cl) {
+    $clVersion = (Get-Item $cl.Source).VersionInfo.FileVersion
+    $environment += "compiler_path=$($cl.Source)"
+    $environment += "compiler_file_version=$clVersion"
+} else {
+    $environment += 'compiler_path=NOT_FOUND'
+    $environment += 'compiler_file_version=UNKNOWN'
+}
+
 $environment | Set-Content -Path (Join-Path $runDir 'environment.txt') -Encoding utf8
 
 if (-not $SkipBuild) {
@@ -66,10 +78,21 @@ if (-not $SkipBuild) {
 $binDir = Join-Path $repoRoot "build/$Configuration"
 $cli = Join-Path $binDir 'luna-cli.exe'
 $app = Join-Path $binDir 'LunaAudioAI.exe'
+$tests = Join-Path $binDir 'luna-tests.exe'
 
 if (-not (Test-Path $cli)) {
     throw "Expected CLI binary not found: $cli"
 }
+
+Write-Step 'Recording build artifact hashes'
+$hashLines = @()
+foreach ($artifact in @($cli, $app, $tests)) {
+    if (Test-Path $artifact) {
+        $hash = Get-FileHash -Algorithm SHA256 -Path $artifact
+        $hashLines += "$($hash.Hash.ToLowerInvariant())  $([System.IO.Path]::GetFileName($artifact))"
+    }
+}
+$hashLines | Set-Content -Path (Join-Path $runDir 'artifact-sha256.txt') -Encoding ascii
 
 Write-Step 'Running CTest'
 ctest --test-dir build -C $Configuration --output-on-failure 2>&1 |
@@ -102,6 +125,11 @@ if ($LASTEXITCODE -ne 0) { throw 'Bypass WAV regression failed.' }
 & $cli wav $original $mix50 --strength 0.5
 if ($LASTEXITCODE -ne 0) { throw '50% mix WAV regression failed.' }
 
+Get-ChildItem -Path $audioDir -Filter '*.wav' | Sort-Object Name | ForEach-Object {
+    $hash = Get-FileHash -Algorithm SHA256 -Path $_.FullName
+    "$($hash.Hash.ToLowerInvariant())  $($_.Name)"
+} | Set-Content -Path (Join-Path $runDir 'fixture-sha256.txt') -Encoding ascii
+
 if (-not $SkipLive) {
     Write-Step 'Running 60-second live smoke test using default devices'
     Write-Host 'This test opens the default microphone/output. Use -SkipLive if no physical device is available.'
@@ -123,7 +151,13 @@ if ($OpenApp) {
     "- Branch: `$branch`",
     "- Commit: `$commit`",
     "- Configuration: `$Configuration`",
-    "- Automated gates: completed by scripts/verify-local.ps1",
+    "- Working tree clean at start: $([string]::IsNullOrWhiteSpace(($status -join '')))" ,
+    '- Configure/build: see configure.txt and build.txt',
+    '- Automated tests: see ctest.txt',
+    '- Benchmark: see benchmark.txt',
+    '- Device enumeration: see devices.txt',
+    '- Build hashes: see artifact-sha256.txt',
+    '- WAV fixture hashes: see fixture-sha256.txt',
     '- Physical end-to-end latency: NOT measured by this script',
     '- Manual WINDOWS_TEST_CHECKLIST.md: pending unless explicitly completed by operator',
     '- Listening evaluation: pending unless explicitly documented',
