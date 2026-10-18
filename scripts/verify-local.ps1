@@ -145,25 +145,26 @@ if ($OpenApp) {
     Start-Process $app
 }
 
-@(
-    '# Local verification notes',
-    '',
-    "- Branch: `$branch`",
-    "- Commit: `$commit`",
-    "- Configuration: `$Configuration`",
-    "- Working tree clean at start: $([string]::IsNullOrWhiteSpace(($status -join '')))" ,
-    '- Configure/build: see configure.txt and build.txt',
-    '- Automated tests: see ctest.txt',
-    '- Benchmark: see benchmark.txt',
-    '- Device enumeration: see devices.txt',
-    '- Build hashes: see artifact-sha256.txt',
-    '- WAV fixture hashes: see fixture-sha256.txt',
-    '- Physical end-to-end latency: NOT measured by this script',
-    '- Manual WINDOWS_TEST_CHECKLIST.md: pending unless explicitly completed by operator',
-    '- Listening evaluation: pending unless explicitly documented',
-    '',
+$notes = @(
+    '# Local verification notes'
+    ''
+    ('- Branch: {0}' -f $branch)
+    ('- Commit: {0}' -f $commit)
+    ('- Configuration: {0}' -f $Configuration)
+    ('- Working tree clean at start: {0}' -f [string]::IsNullOrWhiteSpace(($status -join '')))
+    '- Configure/build: see configure.txt and build.txt'
+    '- Automated tests: see ctest.txt'
+    '- Benchmark: see benchmark.txt'
+    '- Device enumeration: see devices.txt'
+    '- Build hashes: see artifact-sha256.txt'
+    '- WAV fixture hashes: see fixture-sha256.txt'
+    '- Physical end-to-end latency: NOT measured by this script'
+    '- Manual WINDOWS_TEST_CHECKLIST.md: pending unless explicitly completed by operator'
+    '- Listening evaluation: pending unless explicitly documented'
+    ''
     'Do not infer target-speaker isolation performance from the synthetic fixture benchmark.'
-) | Set-Content -Path (Join-Path $runDir 'notes.md') -Encoding utf8
+)
+$notes | Set-Content -Path (Join-Path $runDir 'notes.md') -Encoding utf8
 
 Write-Step 'Local verification complete'
 Write-Host "Evidence directory: $runDir"
