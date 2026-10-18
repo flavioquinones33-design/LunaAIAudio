@@ -148,8 +148,26 @@ if (-not $SkipLive) {
     }
     Write-Step "Running 60-second live smoke test using $deviceMode"
     Write-Host 'This test opens the selected microphone/output. Use -SkipLive if no physical device is available.'
-    & $cli @liveArgs 2>&1 | Tee-Object -FilePath (Join-Path $runDir 'live-smoke.txt')
-    if ($LASTEXITCODE -ne 0) { throw 'Live smoke test failed.' }
+
+    $liveEvidence = Join-Path $runDir 'live-smoke.txt'
+    @(
+        "started=$(Get-Date -Format o)"
+        "device_mode=$deviceMode"
+        "command=luna-cli $($liveArgs -join ' ')"
+        'stdout_capture=console_direct (PowerShell pipeline deliberately disabled for WASAPI stability)'
+    ) | Set-Content -Path $liveEvidence -Encoding utf8
+
+    # Run the native process directly. Piping a live WASAPI process through Tee-Object
+    # can change native-process I/O behavior on Windows; the direct invocation matches
+    # the manually validated command path.
+    & $cli @liveArgs
+    $liveExitCode = $LASTEXITCODE
+    @(
+        "finished=$(Get-Date -Format o)"
+        "exit_code=$liveExitCode"
+    ) | Add-Content -Path $liveEvidence -Encoding utf8
+
+    if ($liveExitCode -ne 0) { throw 'Live smoke test failed.' }
 }
 
 if ($OpenApp) {
@@ -175,6 +193,7 @@ $notes = @(
     '- Device enumeration: see devices.txt'
     '- Build hashes: see artifact-sha256.txt'
     '- WAV fixture hashes: see fixture-sha256.txt'
+    '- Live smoke command/status: see live-smoke.txt; native stdout remains on console to avoid WASAPI/pipeline interference'
     '- Physical end-to-end latency: NOT measured by this script'
     '- Manual WINDOWS_TEST_CHECKLIST.md: pending unless explicitly completed by operator'
     '- Listening evaluation: pending unless explicitly documented'
