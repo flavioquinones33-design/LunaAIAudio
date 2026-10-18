@@ -43,6 +43,12 @@
 #include "celt_lpc.h"
 #include "math.h"
 
+/* Bounds used by the vendored RNNoise denoiser. Keep these compile-time
+   constants in sync with denoise.c. They match current RNNoise upstream and
+   avoid C99 variable-length arrays, which MSVC does not support. */
+#define RNNOISE_PITCH_MAX_PERIOD 768
+#define RNNOISE_PITCH_FRAME_SIZE 960
+
 static void find_best_pitch(opus_val32 *xcorr, opus_val16 *y, int len,
                             int max_pitch, int *best_pitch
 #ifdef FIXED_POINT
@@ -292,14 +298,15 @@ void pitch_search(const opus_val16 *x_lp, opus_val16 *y,
    int shift=0;
 #endif
    int offset;
+   opus_val16 x_lp4[RNNOISE_PITCH_FRAME_SIZE>>2];
+   opus_val16 y_lp4[(RNNOISE_PITCH_FRAME_SIZE+RNNOISE_PITCH_MAX_PERIOD)>>2];
+   opus_val32 xcorr[RNNOISE_PITCH_MAX_PERIOD>>1];
 
+   celt_assert(len <= RNNOISE_PITCH_FRAME_SIZE);
+   celt_assert(max_pitch <= RNNOISE_PITCH_MAX_PERIOD);
    celt_assert(len>0);
    celt_assert(max_pitch>0);
    lag = len+max_pitch;
-
-   opus_val16 x_lp4[len>>2];
-   opus_val16 y_lp4[lag>>2];
-   opus_val32 xcorr[max_pitch>>1];
 
    /* Downsample by 2 again */
    for (j=0;j<len>>2;j++)
@@ -431,7 +438,9 @@ opus_val16 remove_doubling(opus_val16 *x, int maxperiod, int minperiod,
    opus_val32 best_xy, best_yy;
    int offset;
    int minperiod0;
+   opus_val32 yy_lookup[RNNOISE_PITCH_MAX_PERIOD+1];
 
+   celt_assert(maxperiod <= RNNOISE_PITCH_MAX_PERIOD);
    minperiod0 = minperiod;
    maxperiod /= 2;
    minperiod /= 2;
@@ -443,7 +452,6 @@ opus_val16 remove_doubling(opus_val16 *x, int maxperiod, int minperiod,
       *T0_=maxperiod-1;
 
    T = T0 = *T0_;
-   opus_val32 yy_lookup[maxperiod+1];
    dual_inner_prod(x, x, x-T0, N, &xx, &xy);
    yy_lookup[0] = xx;
    yy=xx;
