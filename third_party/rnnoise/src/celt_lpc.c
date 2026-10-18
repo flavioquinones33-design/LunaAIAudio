@@ -208,8 +208,11 @@ int _celt_autocorr(
    int fastN=n-lag;
    int shift;
    const opus_val16 *xptr;
-   opus_val16 xx[n];
+   /* RNNoise calls this with half of PITCH_BUF_SIZE (1728 / 2 = 864).
+      Keep a fixed stack buffer for MSVC compatibility and real-time safety. */
+   opus_val16 xx[864];
    celt_assert(n>0);
+   celt_assert(n<=864);
    celt_assert(overlap>=0);
    if (overlap == 0)
    {
