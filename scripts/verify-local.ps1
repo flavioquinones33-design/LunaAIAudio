@@ -4,6 +4,9 @@ param(
 
     [int]$BenchmarkSeconds = 60,
 
+    [int]$MicIndex = -1,
+    [int]$OutputIndex = -1,
+
     [switch]$SkipBuild,
     [switch]$SkipLive,
     [switch]$OpenApp
@@ -43,6 +46,8 @@ $environment += "branch=$branch"
 $environment += "commit=$commit"
 $environment += "working_tree_clean=$([string]::IsNullOrWhiteSpace(($status -join '')))"
 $environment += "configuration=$Configuration"
+$environment += "mic_index=$MicIndex"
+$environment += "output_index=$OutputIndex"
 $environment += "computer_name=$env:COMPUTERNAME"
 $environment += "processor_architecture=$env:PROCESSOR_ARCHITECTURE"
 $environment += "processor_identifier=$env:PROCESSOR_IDENTIFIER"
@@ -131,9 +136,19 @@ Get-ChildItem -Path $audioDir -Filter '*.wav' | Sort-Object Name | ForEach-Objec
 } | Set-Content -Path (Join-Path $runDir 'fixture-sha256.txt') -Encoding ascii
 
 if (-not $SkipLive) {
-    Write-Step 'Running 60-second live smoke test using default devices'
-    Write-Host 'This test opens the default microphone/output. Use -SkipLive if no physical device is available.'
-    & $cli live --seconds 60 2>&1 | Tee-Object -FilePath (Join-Path $runDir 'live-smoke.txt')
+    $liveArgs = @('live', '--seconds', '60')
+    $deviceMode = 'default devices'
+    if ($MicIndex -ge 0) {
+        $liveArgs += @('--mic', [string]$MicIndex)
+        $deviceMode = "explicit mic $MicIndex"
+    }
+    if ($OutputIndex -ge 0) {
+        $liveArgs += @('--output', [string]$OutputIndex)
+        $deviceMode += ", output $OutputIndex"
+    }
+    Write-Step "Running 60-second live smoke test using $deviceMode"
+    Write-Host 'This test opens the selected microphone/output. Use -SkipLive if no physical device is available.'
+    & $cli @liveArgs 2>&1 | Tee-Object -FilePath (Join-Path $runDir 'live-smoke.txt')
     if ($LASTEXITCODE -ne 0) { throw 'Live smoke test failed.' }
 }
 
@@ -152,6 +167,8 @@ $notes = @(
     ('- Commit: {0}' -f $commit)
     ('- Configuration: {0}' -f $Configuration)
     ('- Working tree clean at start: {0}' -f [string]::IsNullOrWhiteSpace(($status -join '')))
+    ('- Live microphone index: {0}' -f $MicIndex)
+    ('- Live output index: {0}' -f $OutputIndex)
     '- Configure/build: see configure.txt and build.txt'
     '- Automated tests: see ctest.txt'
     '- Benchmark: see benchmark.txt'
