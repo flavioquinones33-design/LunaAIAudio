@@ -61,8 +61,8 @@ void rawWav(const std::filesystem::path& path,unsigned rate,unsigned channels,co
 }
 }
 int main(){
-    auto dir=std::filesystem::temp_directory_path()/("luna-tests-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-    std::filesystem::create_directory(dir);
+    auto tempDir=std::filesystem::temp_directory_path()/("luna-tests-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directory(tempDir);
     unsigned passed=0,failed=0;
     auto test=[&](const char*name,std::function<void()>body){try{body();++passed;std::cout<<"PASS "<<name<<'\n';}catch(const std::exception&e){++failed;std::cerr<<"FAIL "<<name<<": "<<e.what()<<'\n';}};
     test("RNNoise silence, finite output and metrics",[]{
@@ -96,26 +96,26 @@ int main(){
         auto in=noise(48000*3);luna::AudioProcessor p;auto out=stream(p,in,480);double a=0,b=0;for(std::size_t i=48000;i<in.size();++i){a+=double(in[i])*in[i];b+=double(out[i])*out[i];}require(b<a*0.8,"Expected synthetic noise attenuation");
     });
     test("WAV bypass lengths, short files, quantization and trailing sample",[&]{
-        for(std::size_t size:{1u,17u,479u,480u,481u,1001u,48000u}){auto input=noise(size);input.back()=0.7f;auto source=dir/(std::to_string(size)+".wav"),dest=dir/(std::to_string(size)+"-out.wav");{luna::WavWriter w(source);w.write(input.data(),input.size());w.finish();}auto r=luna::processWav(source,dest,1,false);auto a=read(source),b=read(dest);require(r.samples==size&&a.size()==size&&b.size()==size,"WAV length mismatch");for(std::size_t i=0;i<size;++i)require(std::abs(a[i]-b[i])<=2.0/32768,"Bypass WAV changed");}
+        for(std::size_t size:{1u,17u,479u,480u,481u,1001u,48000u}){auto input=noise(size);input.back()=0.7f;auto source=tempDir/(std::to_string(size)+".wav"),dest=tempDir/(std::to_string(size)+"-out.wav");{luna::WavWriter w(source);w.write(input.data(),input.size());w.finish();}auto r=luna::processWav(source,dest,1,false);auto a=read(source),b=read(dest);require(r.samples==size&&a.size()==size&&b.size()==size,"WAV length mismatch");for(std::size_t i=0;i<size;++i)require(std::abs(a[i]-b[i])<=2.0/32768,"Bypass WAV changed");}
     });
     test("WAV 44.1 kHz stereo conversion to 48 kHz mono",[&]{
-        auto source=dir/"stereo441.wav",dest=dir/"stereo-out.wav";std::vector<short> data(44100*2);
+        auto source=tempDir/"stereo441.wav",dest=tempDir/"stereo-out.wav";std::vector<short> data(44100*2);
         for(std::size_t i=0;i<44100;++i){data[2*i]=static_cast<short>(8000*std::sin(i*0.02));data[2*i+1]=data[2*i];}rawWav(source,44100,2,data);auto result=luna::processWav(source,dest);auto out=read(dest);require(result.samples>=47998&&result.samples<=48002,"Resample duration");require(out.size()==result.samples,"Converted length");for(auto x:out)require(std::isfinite(x),"Nonfinite resample");
     });
     test("Originals and existing outputs protected, invalid inputs rejected",[&]{
-        auto source=dir/"fixture.wav",dest=dir/"fixture-out.wav";luna::generateFixture(source,0.1);auto before=read(source);
+        auto source=tempDir/"fixture.wav",dest=tempDir/"fixture-out.wav";luna::generateFixture(source,0.1);auto before=read(source);
         fails([&]{luna::processWav(source,source);});require(read(source)==before,"Original overwritten");
         luna::processWav(source,dest);auto after=read(dest);fails([&]{luna::processWav(source,dest);});require(read(dest)==after,"Existing output overwritten");
-        fails([&]{luna::processWav(dir/"absent.wav",dir/"absent-out.wav");});require(!std::filesystem::exists(dir/"absent-out.wav"),"Unexpected output");
-        auto corrupt=dir/"bad.wav";{std::ofstream f(corrupt);f<<"not a wav";}fails([&]{luna::processWav(corrupt,dir/"bad-out.wav");});
-        auto truncated=dir/"truncated.wav";std::filesystem::copy_file(source,truncated);std::filesystem::resize_file(truncated,55);fails([&]{luna::processWav(truncated,dir/"truncated-out.wav");});
-        auto empty=dir/"empty.wav";{luna::WavWriter w(empty);w.finish();}fails([&]{luna::processWav(empty,dir/"empty-out.wav");});require(!std::filesystem::exists(dir/"empty-out.wav"),"Partial output left behind");
+        fails([&]{luna::processWav(tempDir/"absent.wav",tempDir/"absent-out.wav");});require(!std::filesystem::exists(tempDir/"absent-out.wav"),"Unexpected output");
+        auto corrupt=tempDir/"bad.wav";{std::ofstream f(corrupt);f<<"not a wav";}fails([&]{luna::processWav(corrupt,tempDir/"bad-out.wav");});
+        auto truncated=tempDir/"truncated.wav";std::filesystem::copy_file(source,truncated);std::filesystem::resize_file(truncated,55);fails([&]{luna::processWav(truncated,tempDir/"truncated-out.wav");});
+        auto empty=tempDir/"empty.wav";{luna::WavWriter w(empty);w.finish();}fails([&]{luna::processWav(empty,tempDir/"empty-out.wav");});require(!std::filesystem::exists(tempDir/"empty-out.wav"),"Partial output left behind");
     });
     test("Invalid engine/fixture/strength rejected",[&]{
         fails([]{luna::AudioProcessor p(nullptr);});fails([]{luna::AudioProcessor p(std::make_unique<DelayEngine>(0,0));});
-        fails([&]{luna::generateFixture(dir/"invalid.wav",-1);});fails([&]{luna::processWav(dir/"fixture.wav",dir/"invalid.wav",2);});
+        fails([&]{luna::generateFixture(tempDir/"invalid.wav",-1);});fails([&]{luna::processWav(tempDir/"fixture.wav",tempDir/"invalid.wav",2);});
     });
-    std::filesystem::remove_all(dir);
+    std::filesystem::remove_all(tempDir);
     std::cout<<passed<<" test groups passed; "<<failed<<" failed\n";
     return failed?1:0;
 }
