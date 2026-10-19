@@ -1,5 +1,6 @@
 #pragma once
 #include "processor.hpp"
+#include "runtime.hpp"
 #include "miniaudio.h"
 #include <string>
 #include <vector>
@@ -50,18 +51,21 @@ public:
 };
 class LiveSession {
     std::unique_ptr<AudioProcessor> processor_;
+    RuntimeEngine* runtime_ = nullptr;
     MonitoringOutput output_;
     MiniaudioInput input_;
     static void callback(void*, const float*, float*, std::size_t) noexcept;
 public:
     ~LiveSession() { stop(); }
     DeviceList enumerate() { return input_.enumerate(); }
-    void start(const AudioDevice*, const AudioDevice*, bool suppress, float strength, bool monitor);
+    void start(const AudioDevice*, const AudioDevice*, bool suppress, float strength, bool monitor,
+               RuntimeMode mode = RuntimeMode::Legacy);
     void stop() noexcept { input_.stop(); }
     bool running() const noexcept { return input_.running(); }
     unsigned interruptions() const noexcept { return input_.interruptions(); }
     std::string streamInfo() const { return input_.streamInfo(); }
     AudioProcessor* processor() noexcept { return processor_.get(); }
+    RuntimeSnapshot runtimeSnapshot() const noexcept { return runtime_ ? runtime_->snapshot() : RuntimeSnapshot{}; }
     MonitoringOutput& output() noexcept { return output_; }
 };
 }
