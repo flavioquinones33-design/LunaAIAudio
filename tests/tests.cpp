@@ -1,4 +1,5 @@
 #include "luna/processor.hpp"
+#include "luna/runtime.hpp"
 #include "luna/wav.hpp"
 #include "miniaudio.h"
 #include <algorithm>
@@ -30,6 +31,16 @@ public:
     std::size_t latencySamples()const noexcept override{return memory_.size();}
     void process(const float* in,float* out)noexcept override{
         for(std::size_t i=0;i<frame_;++i){if(memory_.empty())out[i]=in[i];else{out[i]=memory_[pos_];memory_[pos_]=in[i];pos_=(pos_+1)%memory_.size();}}
+    }
+};
+class InvalidEngine final:public luna::NoiseSuppressionEngine {
+public:
+    const char* name()const noexcept override{return "test invalid";}
+    unsigned sampleRate()const noexcept override{return 48000;}
+    std::size_t frameSize()const noexcept override{return 480;}
+    std::size_t latencySamples()const noexcept override{return 480;}
+    void process(const float*,float* out)noexcept override{
+        std::fill(out,out+480,std::numeric_limits<float>::quiet_NaN());
     }
 };
 std::vector<float> noise(std::size_t n) {
@@ -81,6 +92,24 @@ int main(){
         auto e=luna::makeRNNoise();auto* raw=rnnoise_create();require(raw!=nullptr,"Raw allocation");
         auto input=noise(480);std::array<float,480> scaled{},actual{},expected{};
         for(int frame=0;frame<20;++frame){for(std::size_t i=0;i<480;++i)scaled[i]=input[i]*32768;e->process(input.data(),actual.data());rnnoise_process_frame(raw,expected.data(),scaled.data());for(std::size_t i=0;i<480;++i)require(std::abs(actual[i]-std::clamp(expected[i]/32768,-1.0f,1.0f))<1e-6,"Scale/parity failure");}rnnoise_destroy(raw);
+    });
+    test("Runtime selects legacy by default",[]{
+        luna::RuntimeEngine runtime;auto s=runtime.snapshot();require(s.requested==luna::RuntimeMode::Legacy&&s.active==luna::RuntimeMode::Legacy,"Legacy runtime not active");require(s.fallbackCount==0&&s.health==luna::EngineHealth::Healthy,"Unexpected legacy fallback");
+    });
+    test("NEXT unavailable falls back to legacy without pretending capability",[]{
+        luna::RuntimeEngine runtime(luna::RuntimeMode::Next);auto s=runtime.snapshot();require(s.requested==luna::RuntimeMode::Next&&s.active==luna::RuntimeMode::Legacy,"NEXT did not fall back to legacy");require(s.fallbackCount>=1&&s.initializationFailures>=1,"NEXT unavailability not recorded");require(s.health==luna::EngineHealth::Degraded,"NEXT fallback health not degraded");
+    });
+    test("Invalid NEXT output falls back to legacy in bounded path",[]{
+        luna::RuntimeEngine runtime(luna::RuntimeMode::Next,std::make_unique<InvalidEngine>(),std::make_unique<DelayEngine>(),luna::makePassthrough());std::array<float,480> in{},out{};runtime.process(in.data(),out.data());auto s=runtime.snapshot();require(s.active==luna::RuntimeMode::Legacy,"Invalid NEXT did not fall back to legacy");require(s.processingFailures>=1&&s.fallbackCount>=1,"NEXT processing failure not counted");for(auto x:out)require(std::isfinite(x)&&std::abs(x)<=1,"Fallback output unsafe");
+    });
+    test("NEXT and legacy invalid outputs fall back to passthrough",[]{
+        luna::RuntimeEngine runtime(luna::RuntimeMode::Next,std::make_unique<InvalidEngine>(),std::make_unique<InvalidEngine>(),luna::makePassthrough());std::array<float,480> in{},out{};runtime.process(in.data(),out.data());auto s=runtime.snapshot();require(s.active==luna::RuntimeMode::Passthrough,"Fallback chain did not reach passthrough");require(s.processingFailures>=2&&s.fallbackCount>=2,"Fallback chain counters incorrect");for(auto x:out)require(std::isfinite(x)&&std::abs(x)<=1,"Passthrough fallback output unsafe");
+    });
+    test("Passthrough runtime preserves signal alignment",[]{
+        auto input=noise(12347);luna::AudioProcessor p(luna::makeRuntimeEngine(luna::RuntimeMode::Passthrough));auto out=stream(p,input,193);require(out==input,"Passthrough runtime changed signal or alignment");
+    });
+    test("Runtime mode parser rejects unknown values",[]{
+        require(luna::parseRuntimeMode("legacy")==luna::RuntimeMode::Legacy,"legacy parse");require(luna::parseRuntimeMode("next")==luna::RuntimeMode::Next,"next parse");require(luna::parseRuntimeMode("passthrough")==luna::RuntimeMode::Passthrough,"passthrough parse");fails([]{(void)luna::parseRuntimeMode("magic");});
     });
     test("Bypass preserves signal and EOF tail with arbitrary chunks",[]{
         auto input=noise(12347);input.back()=0.9f;
