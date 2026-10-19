@@ -40,7 +40,8 @@ int app(const std::vector<std::string>& args) {
           "  luna-cli wav input.wav output.wav [--strength 0..1] [--bypass]\n"
           "  luna-cli benchmark [--seconds 60]\n"
           "  luna-cli live [--mic INDEX] [--output INDEX] [--seconds 60] [--monitor]\n"
-          "                [--strength 0..1] [--bypass]\n"
+          "                [--strength 0..1] [--bypass] [--mode legacy|next|passthrough]\n"
+          "NEXT is an interface slot only until an experimental backend is integrated; it falls back safely.\n"
           "Live audio is never recorded. Monitor needs headphones. WAV output must be a new local file.\n";
         return 0;
     }
@@ -51,11 +52,15 @@ int app(const std::vector<std::string>& args) {
     if (args.size() < static_cast<std::size_t>(start)) throw std::invalid_argument("Missing WAV path; use --help");
     double seconds = 12; float strength = 1; bool enabled = true, monitor = false;
     int mic = -1, output = -1;
+    luna::RuntimeMode mode = luna::RuntimeMode::Legacy;
     for (std::size_t i = start; i < args.size(); ++i) {
         auto option = args[i];
         if (option == "--bypass" && (command == "wav" || command == "live")) enabled = false;
         else if (option == "--monitor" && command == "live") monitor = true;
-        else {
+        else if (option == "--mode" && command == "live") {
+            if (++i == args.size()) throw std::invalid_argument("Missing runtime mode");
+            mode = luna::parseRuntimeMode(args[i].c_str());
+        } else {
             if (++i == args.size()) throw std::invalid_argument("Missing option value");
             auto x = number(args[i]);
             if (option == "--seconds" && command != "wav" && command != "devices") seconds = x;
@@ -80,8 +85,12 @@ int app(const std::vector<std::string>& args) {
     if (command == "devices") return 0;
     if (mic >= static_cast<int>(devices.microphones.size()) || output >= static_cast<int>(devices.outputs.size())) throw std::invalid_argument("Device index is out of range");
     std::signal(SIGINT, signalHandler);
-    session.start(mic < 0 ? nullptr : &devices.microphones[mic], output < 0 ? nullptr : &devices.outputs[output], enabled, strength, monitor);
-    std::cout << session.streamInfo() << "\nLive processing; recording OFF. Ctrl+C stops.\n";
+    session.start(mic < 0 ? nullptr : &devices.microphones[mic], output < 0 ? nullptr : &devices.outputs[output], enabled, strength, monitor, mode);
+    auto initialRuntime = session.runtimeSnapshot();
+    std::cout << session.streamInfo() << "\nRuntime requested/active: " << luna::runtimeModeName(initialRuntime.requested)
+      << "/" << luna::runtimeModeName(initialRuntime.active) << " | health: " << luna::engineHealthName(initialRuntime.health)
+      << " | fallback: " << luna::fallbackReasonName(initialRuntime.lastFallbackReason) << "\n"
+      << "Live processing; recording OFF. Ctrl+C stops.\n";
     auto startTime = std::chrono::steady_clock::now();
     while (!interrupted && std::chrono::duration<double>(std::chrono::steady_clock::now()-startTime).count() < seconds) {
         if (!session.running()) throw std::runtime_error("Audio device stopped unexpectedly");
@@ -89,9 +98,16 @@ int app(const std::vector<std::string>& args) {
     }
     session.stop();
     auto m = session.processor()->metrics().snapshot();
+    auto runtime = session.runtimeSnapshot();
     std::cout << "DSP mean/max us: " << m.meanUs << "/" << m.maxUs << "; frames: " << m.frames
       << "; late frames: " << m.lateFrames << "; late callbacks: " << m.lateCallbacks
-      << "; device events: " << session.interruptions() << '\n';
+      << "; device events: " << session.interruptions() << '\n'
+      << "Runtime requested/active: " << luna::runtimeModeName(runtime.requested) << "/" << luna::runtimeModeName(runtime.active)
+      << "; health: " << luna::engineHealthName(runtime.health)
+      << "; fallbacks: " << runtime.fallbackCount
+      << "; init failures: " << runtime.initializationFailures
+      << "; processing failures: " << runtime.processingFailures
+      << "; last reason: " << luna::fallbackReasonName(runtime.lastFallbackReason) << '\n';
     return m.frames == 0 ? 2 : 0;
 }
 }
@@ -99,7 +115,6 @@ int main(int argc, char** argv) {
     try {
         std::vector<std::string> args;
 #ifdef _WIN32
-        // CRT argv follows the active code page. Obtain Unicode arguments directly.
         int count = 0;
         auto wide = CommandLineToArgvW(GetCommandLineW(), &count);
         if (!wide) throw std::runtime_error("Read command line failed");
