@@ -53,7 +53,7 @@ void MiniaudioInput::start(const AudioDevice* microphone, const AudioDevice* out
     config.sampleRate = sample_rate;
     config.periodSizeInFrames = 480;
     config.periods = 2;
-    config.noFixedSizedCallback = MA_TRUE; // processor accepts arbitrary callback partitions
+    config.noFixedSizedCallback = MA_TRUE;
     config.performanceProfile = ma_performance_profile_low_latency;
     config.dataCallback = data; config.notificationCallback = notification; config.pUserData = this;
     check(ma_device_init(&context_, &config, &device_), "Open microphone/output (check Windows permissions)");
@@ -78,7 +78,6 @@ std::string MiniaudioInput::streamInfo() const {
 }
 void MonitoringOutput::render(float* samples, std::size_t count) noexcept {
     if (!samples) return;
-    // Monitoring is deliberately quieter (-12 dB), with a 5 ms gain ramp.
     float target = enabled_.load(std::memory_order_relaxed) ? 0.25f : 0.0f;
     for (std::size_t i = 0; i < count; ++i) {
         gain_ += std::clamp(target - gain_, -1.0f/960, 1.0f/960);
@@ -93,11 +92,20 @@ void LiveSession::callback(void* user, const float* in, float* out, std::size_t 
     float us = std::chrono::duration<float, std::micro>(std::chrono::steady_clock::now() - start).count();
     self.processor_->metrics().callback(us, static_cast<float>(count) * 1000000.0f / sample_rate);
 }
-void LiveSession::start(const AudioDevice* mic, const AudioDevice* out, bool suppress, float strength, bool monitor) {
+void LiveSession::start(const AudioDevice* mic, const AudioDevice* out, bool suppress, float strength, bool monitor,
+                        RuntimeMode mode) {
     stop();
-    processor_ = std::make_unique<AudioProcessor>();
+    auto runtime = makeRuntimeEngine(mode);
+    runtime_ = runtime.get();
+    processor_ = std::make_unique<AudioProcessor>(std::move(runtime));
     processor_->setEnabled(suppress); processor_->setStrength(strength);
     output_.enable(monitor);
-    input_.start(mic, out, callback, this);
+    try {
+        input_.start(mic, out, callback, this);
+    } catch (...) {
+        runtime_ = nullptr;
+        processor_.reset();
+        throw;
+    }
 }
 }
